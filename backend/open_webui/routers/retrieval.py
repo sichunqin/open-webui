@@ -1514,15 +1514,22 @@ def save_docs_to_vector_db(
         embeddings = future.result(timeout=embedding_timeout)
         log.info(f'embeddings generated {len(embeddings)} for {len(texts)} items')
 
-        items = [
-            {
-                'id': str(uuid.uuid4()),
-                'text': text,
-                'vector': embeddings[idx],
-                'metadata': metadatas[idx],
-            }
-            for idx, text in enumerate(texts)
-        ]
+        # Filter out texts without valid embeddings (empty lists are rejected by chromadb)
+        valid_items = []
+        for idx, text in enumerate(texts):
+            if idx < len(embeddings) and len(embeddings[idx]) > 0:
+                valid_items.append({
+                    'id': str(uuid.uuid4()),
+                    'text': text,
+                    'vector': embeddings[idx],
+                    'metadata': metadatas[idx],
+                })
+
+        items = valid_items
+
+        if not items:
+            log.warning(f'No valid embeddings found, skipping vector DB insert for collection {collection_name}')
+            return True
 
         log.info(f'adding to collection {collection_name}')
         VECTOR_DB_CLIENT.insert(
